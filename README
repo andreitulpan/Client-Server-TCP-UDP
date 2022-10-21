@@ -1,0 +1,93 @@
+# Copyright 2022 Tulpan Andrei 324CA - Tema 2 PCom
+
+<-------------------------Introducere------------------------->
+    Pentru realizarea temei am folosit limbajul de programare
+C++ cu librariile aditionale pentru partea de networking si
+am realizat cate o clasa pentru server si pentru client cu
+metodele aditionale fiecaruia pentru rezolvarea corespunzatoare
+a cerintelor temei.
+    Multiplexarea intrarilor am realizat-o folosind functia select
+si pe multimea de descriptori necesara in ambele cazuri.
+    Pe fiecare socket TCP am dezactivat algoritmul NAGLE pentru
+o mai buan functionare a trimiterii mesajelor. Pe langa
+dezactivarea acestui algoritm am verificat si daca se concateneaza
+mesajele primite datorita trimiterii intr-un timp prea scurt a
+multor mesaje sau daca se trimit fragmente de mesaje si le-am
+concatenat intr-un singur mesaj, acesta fiind cel initial.
+    Atat in client, cat si in server am verificat daca se primeste
+de la stdin comanda de exit si am oprit rularea programului, iar
+in cazul serverului daca se opreste am oprit si toti clientii.
+
+<---------------------------Server---------------------------->
+    In timpul rularii serverului verific daca se primeste un
+mesaj UDP, o conexiune noua TCP sau un request TCP.
+    In cazul primirii mesajelor UDP definite prin structura
+UDPpacket, verific clientii ce au topic-ul definit in mesaj
+si le redirectionez mesajele prin socket-ul TCP al fiecarui
+client daca acestia sunt conectati, iar in caz contrar le
+salvez mesajele intr-o coada daca au flag store and forward
+egal cu 1. Cozile pentru fiecare client sunt salvate intr-un
+hashmap care are cheia ID-ul fiecarui client.
+    In cazul primirii unei conexiuni noi TCP, astept un mesaj
+de la client cu ID-ul acestuia, apoi verific daca este deja
+conectat, in acest caz afisez un mesaj de eroare. Daca clientul
+nu este conectat, verific daca a mai fost conectat in trecut
+si ii updatez socket-ul si statusul de conectare, apoi ii trimit
+toate mesajele din coada specifica lui.
+    Comunicarea dintre server si client se face prin niste
+TCP request-uri definite prin structura TCPrequest prin care
+clientul trimite catre server anumite comenzi: connect
+(doar ID-ul), subscribe, unsubscribe, close (pachet gol).
+
+<---------------------------Client---------------------------->
+    La pornirea server-ului dupa conectare trimit ID-ul catre
+server printr-un TCPrequest. In timpul rularii clientului verific
+daca se citeste de la stdin o comanda sau daca se primeste un
+pachet TCP. Pentru comenzile citite le despart in substring-uri
+si trimit request-urile necesare catre server printr-o structura
+de tip TCPrequest, iar pentru mesajele TCP exista un buffer in
+care se salveaza mesajele acestea putand ajunge concatenate sau
+impartite in mai multe mesaje. In acest buffer adaug mereu partile
+de mesaj TCP, de tip TCPpacket, primite la inceput avand mereu
+size-ul mesajului ce urmeaza a fi procesat. Daca in buffer am
+unul sau mai multe mesaje de dimensiunea corespunzatoare (primita),
+procesez afisarea acestora si astept pentru restul partilor de
+mesaje din buffer sa primesc completarea.
+
+<-------------------------UDP Packet-------------------------->
+struct UDPpacket {
+  char topic[50];
+  uint8_t type;
+  char content[1500];
+};
+    Structura este folosita pentru receptionarea mesajelor
+trimise de clientii UDP catre server in care se primeste
+un topic de 50 de caractere, tipul mesajului pentru afisare
+si mesaj care poate avea pana la 1500 de caractere.
+
+<-------------------------TCP Packet-------------------------->
+struct TCPpacket {
+    int size;
+    struct sockaddr_in source;
+    UDPpacket payload;
+};
+    Structura este folosita pentru trimiterea mesajelor de pe
+server catre clientii TCP si contine size-ul mesajului, care
+sta la baza definirii mesajelor primite concatenate sau
+impartite in mai multe mesaje, datele despre clientul UDP
+care a trimis mesajul UDP si mesaj UDP trimis.
+
+<------------------------TCP Request-------------------------->
+struct TCPrequest {
+    uint8_t type;
+    int data_size;
+    char id[10];
+    char payload[64];
+};
+    Structura este folosita pentru trimiterea comenzilor de pe
+clienti pe server. Aceasta are un tip al mesajului care poate
+fi: 1 - connect, 2 - subscribe, 3 - unsubscribe, dimensiunea
+pachetului, id-ul clientului si payload-ul care in implementare
+contine topic-ul la care se aboneaza/dezaboneaza si flag-ul
+pentru store and forward.
+
